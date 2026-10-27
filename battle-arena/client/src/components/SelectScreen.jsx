@@ -1,53 +1,77 @@
+/**
+ * SelectScreen.jsx
+ * Character archetype selection stage.
+ * Visually emphasizes Inheritance (subclasses inheriting from Character),
+ * Polymorphism (pure virtual overrides), Encapsulation (protected fields),
+ * and Templates (Inventory<shared_ptr<Item>>).
+ */
 import React, { useState } from 'react';
+import ClassAvatar from './ClassAvatar';
 
-const CLASSES = [
+const CLASS_DEFINITIONS = [
   {
     id: 'Warrior',
     name: 'Warrior',
-    icon: '🛡️',
-    hp: 130,
-    mp: 30,
-    atk: 22,
-    def: 12,
-    special: 'Berserk',
+    cppClassLine: 'class Warrior : public Character',
+    polymorphismTag: 'overrides attack() & specialMove() | Polymorphism',
+    stats: {
+      health: 130,
+      mana: 30,
+      attackPower: 22,
+      defense: 12
+    },
+    specialName: 'Berserk',
+    specialCost: '0 MP (25% recoil)',
     specialDesc: 'Deals 2x damage (+bonus), but suffers 25% recoil damage.',
-    starter: '2x Health Potions, 1x Battle Axe (+6 ATK)'
+    starterItems: '2x Health Potion, 1x Battle Axe (+6 ATK)'
   },
   {
     id: 'Mage',
     name: 'Mage',
-    icon: '🔮',
-    hp: 85,
-    mp: 100,
-    atk: 16,
-    def: 6,
-    special: 'Fireball',
-    specialDesc: 'Unleashes 46-58 massive spell damage. Costs 30 MP.',
-    starter: '1x Health Potion, 2x Mana Potions'
+    cppClassLine: 'class Mage : public Character',
+    polymorphismTag: 'overrides attack() & specialMove() | Polymorphism',
+    stats: {
+      health: 85,
+      mana: 100,
+      attackPower: 16,
+      defense: 6
+    },
+    specialName: 'Fireball',
+    specialCost: '30 MP',
+    specialDesc: 'Summons devastating flame dealing 46–58 spell damage. Throws GameException if mana < 30.',
+    starterItems: '1x Health Potion, 2x Mana Potion'
   },
   {
     id: 'Archer',
     name: 'Archer',
-    icon: '🏹',
-    hp: 95,
-    mp: 50,
-    atk: 20,
-    def: 8,
-    special: 'Multi-shot',
-    specialDesc: 'Fires 3 rapid arrows in sequence. Costs 20 MP. Passive 35% crit chance on basics.',
-    starter: '1x Health Potion, 1x Mana Potion, 1x Armor (+5 DEF)'
+    cppClassLine: 'class Archer : public Character',
+    polymorphismTag: 'overrides attack() & specialMove() | Polymorphism',
+    stats: {
+      health: 95,
+      mana: 50,
+      attackPower: 20,
+      defense: 8
+    },
+    specialName: 'Multi-shot',
+    specialCost: '20 MP',
+    specialDesc: 'Fires 3 rapid arrows in sequence. Passive 35% critical strike chance on basic shots.',
+    starterItems: '1x Health Potion, 1x Mana Potion, 1x Armor (+5 DEF)'
   },
   {
     id: 'Healer',
     name: 'Healer',
-    icon: '🌿',
-    hp: 90,
-    mp: 80,
-    atk: 14,
-    def: 8,
-    special: 'Soul Drain',
-    specialDesc: 'Siphons vitality from the enemy to heal the Healer. Costs 25 MP.',
-    starter: '2x Health Potions, 1x Mana Potion'
+    cppClassLine: 'class Healer : public Character',
+    polymorphismTag: 'overrides attack() & specialMove() | Polymorphism',
+    stats: {
+      health: 90,
+      mana: 80,
+      attackPower: 14,
+      defense: 8
+    },
+    specialName: 'Soul Drain',
+    specialCost: '25 MP',
+    specialDesc: 'Drains enemy vitality to heal self for the exact damage dealt.',
+    starterItems: '2x Health Potion, 1x Mana Potion'
   }
 ];
 
@@ -59,9 +83,18 @@ export default function SelectScreen({
 }) {
   const [selectedClass, setSelectedClass] = useState('Warrior');
   const [isReady, setIsReady] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const me = players[playerIndex];
   const opponent = players[1 - playerIndex];
+  const bothPlayersJoined = players.length >= 2;
+  const bothReady = bothPlayersJoined && players[0]?.ready && players[1]?.ready;
+
+  const handleCopyCode = () => {
+    navigator.clipboard?.writeText(roomCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
 
   const handleConfirm = () => {
     setIsReady(true);
@@ -70,125 +103,184 @@ export default function SelectScreen({
 
   return (
     <div className="select-container">
-      <div style={{
-        background: 'var(--bg-card)',
-        padding: '1.2rem',
-        borderRadius: '12px',
-        border: '1px solid var(--bg-card-border)',
-        display: 'flex',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        gap: '1rem'
-      }}>
-        <div>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>ROOM CODE:</span>
-          <h2 style={{ color: 'var(--accent-gold)', letterSpacing: '0.15em', fontSize: '1.8rem' }}>
-            {roomCode}
-          </h2>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-            Share this 4-letter code with Player 2 to join over LAN / Wi-Fi
+      {/* Ready Splash Overlay when match is starting */}
+      {bothReady && (
+        <div className="fight-splash-overlay" aria-live="assertive">
+          <div className="fight-splash-content">
+            <span className="fight-splash-icon">⚔️</span>
+            <h1 className="fight-splash-text heading-font">FIGHT!</h1>
+            <p style={{ color: 'var(--text-muted)', fontSize: '1rem' }}>
+              Spawning C++ <code>battle_engine.exe</code> process...
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Room Information & Players Live Status */}
+      <div className="select-header-box">
+        <div className="room-meta-group">
+          <span className="room-label">MATCH ROOM CODE:</span>
+          <div className="room-code-display">
+            <h2 className="room-code-text heading-font">{roomCode}</h2>
+            <button
+              className="btn btn-secondary btn-copy"
+              onClick={handleCopyCode}
+              title="Copy room code to clipboard"
+            >
+              {copied ? '✓ Copied!' : '📋 Copy Code'}
+            </button>
+          </div>
+          <span className="room-helper-text">
+            Give this 4-letter code to Player 2 to join over LAN or Wi-Fi.
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <div style={{
-            padding: '0.6rem 1rem',
-            background: 'rgba(0,0,0,0.3)',
-            borderRadius: '8px',
-            border: playerIndex === 0 ? '1px solid var(--accent-gold)' : '1px solid transparent'
-          }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Player 1 (Host)</div>
-            <div style={{ fontWeight: 'bold' }}>{players[0]?.name || 'Waiting...'}</div>
-            <div style={{ fontSize: '0.75rem', color: players[0]?.ready ? '#10b981' : '#f59e0b' }}>
-              {players[0]?.ready ? `✓ Ready (${players[0]?.class})` : 'Selecting...'}
+        {/* Live Status Cards for Both Combatants */}
+        <div className="players-lobby-bar">
+          <div className={`player-lobby-pill ${playerIndex === 0 ? 'is-self' : ''}`}>
+            <div className="pill-top">
+              <span className="pill-role">Player 1 (Host)</span>
+              {players[0]?.ready && <span className="ready-tag">✓ READY</span>}
+            </div>
+            <strong className="pill-name">{players[0]?.name || 'Waiting...'}</strong>
+            <div className="pill-class-status">
+              {players[0]?.ready ? (
+                <code>class {players[0].class}</code>
+              ) : (
+                <span className="selecting-text">Choosing archetype...</span>
+              )}
             </div>
           </div>
 
-          <div style={{
-            padding: '0.6rem 1rem',
-            background: 'rgba(0,0,0,0.3)',
-            borderRadius: '8px',
-            border: playerIndex === 1 ? '1px solid var(--accent-gold)' : '1px solid transparent'
-          }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Player 2</div>
-            <div style={{ fontWeight: 'bold' }}>{players[1]?.name || 'Waiting to join...'}</div>
-            <div style={{ fontSize: '0.75rem', color: players[1]?.ready ? '#10b981' : '#f59e0b' }}>
-              {players[1] ? (players[1]?.ready ? `✓ Ready (${players[1]?.class})` : 'Selecting...') : 'Empty slot'}
+          <div className={`player-lobby-pill ${playerIndex === 1 ? 'is-self' : ''}`}>
+            <div className="pill-top">
+              <span className="pill-role">Player 2</span>
+              {players[1]?.ready && <span className="ready-tag">✓ READY</span>}
+            </div>
+            <strong className="pill-name">{players[1]?.name || 'Waiting to join...'}</strong>
+            <div className="pill-class-status">
+              {players[1] ? (
+                players[1].ready ? (
+                  <code>class {players[1].class}</code>
+                ) : (
+                  <span className="selecting-text">Choosing archetype...</span>
+                )
+              ) : (
+                <span className="waiting-pulse">⏳ Waiting for Player 2...</span>
+              )}
             </div>
           </div>
         </div>
       </div>
 
+      {/* Title */}
       <div style={{ textAlign: 'center' }}>
-        <h3 className="heading-font" style={{ fontSize: '1.4rem', marginBottom: '0.3rem' }}>
-          Choose Your Combat Archetype
+        <h3 className="heading-font" style={{ fontSize: '1.4rem', color: 'var(--accent-gold)' }}>
+          Select Concrete Character Class
         </h3>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-          Each class overrides base C++ <code style={{ color: '#c4b5fd' }}>Character::attack()</code> and <code style={{ color: '#c4b5fd' }}>Character::specialMove()</code> polymorphically.
+          Concrete classes inherit from abstract base <code style={{ color: '#c4b5fd' }}>Character</code> and override pure virtual methods <code style={{ color: '#c4b5fd' }}>attack()</code> & <code style={{ color: '#c4b5fd' }}>specialMove()</code>.
         </p>
       </div>
 
+      {/* Class Archetype Cards Grid */}
       <div className="class-grid">
-        {CLASSES.map((cls) => {
+        {CLASS_DEFINITIONS.map((cls) => {
           const isSelected = selectedClass === cls.id;
           return (
             <div
               key={cls.id}
               className={`class-card ${isSelected ? 'selected' : ''}`}
               onClick={() => !isReady && setSelectedClass(cls.id)}
+              role="button"
+              tabIndex={0}
+              aria-pressed={isSelected}
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' || e.key === ' ') && !isReady) setSelectedClass(cls.id);
+              }}
             >
-              <div className="class-icon">{cls.icon}</div>
-              <div className="class-name">{cls.name}</div>
+              {/* Avatar Illustration */}
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.3rem' }}>
+                <ClassAvatar characterClass={cls.id} size={70} />
+              </div>
 
-              <div className="class-stats">
-                <div className="stat-row">
-                  <span>HP:</span>
-                  <strong style={{ color: '#10b981' }}>{cls.hp}</strong>
+              {/* C++ Class Signature */}
+              <div className="class-cpp-signature">
+                <code>{cls.cppClassLine}</code>
+              </div>
+
+              <div className="class-name heading-font">{cls.name}</div>
+
+              <div className="polymorphism-chip">
+                {cls.polymorphismTag}
+              </div>
+
+              {/* Protected Fields (Encapsulation) */}
+              <div className="class-encapsulated-stats">
+                <div className="stats-sub-header">
+                  <span>protected members:</span>
+                  <span className="encap-badge">Encapsulation</span>
                 </div>
-                <div className="stat-row">
-                  <span>MP:</span>
-                  <strong style={{ color: '#3b82f6' }}>{cls.mp}</strong>
+
+                <div className="stat-data-row">
+                  <span>health:</span>
+                  <strong style={{ color: '#10b981' }}>{cls.stats.health}</strong>
                 </div>
-                <div className="stat-row">
-                  <span>Base ATK:</span>
-                  <strong>{cls.atk}</strong>
+                <div className="stat-data-row">
+                  <span>mana:</span>
+                  <strong style={{ color: '#38bdf8' }}>{cls.stats.mana}</strong>
                 </div>
-                <div className="stat-row">
-                  <span>Base DEF:</span>
-                  <strong>{cls.def}</strong>
+                <div className="stat-data-row">
+                  <span>attackPower:</span>
+                  <strong>{cls.stats.attackPower}</strong>
+                </div>
+                <div className="stat-data-row">
+                  <span>defense:</span>
+                  <strong>{cls.stats.defense}</strong>
                 </div>
               </div>
 
-              <div className="class-special">
-                <div style={{ fontWeight: 'bold', color: 'var(--accent-gold)', marginBottom: '0.2rem' }}>
-                  ★ {cls.special}
+              {/* Special Move info */}
+              <div className="class-special-box">
+                <div className="special-title-row">
+                  <span className="special-icon">★</span>
+                  <strong>{cls.specialName}</strong>
+                  <span className="special-cost-tag">{cls.specialCost}</span>
                 </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                  {cls.specialDesc}
-                </div>
+                <div className="special-desc-text">{cls.specialDesc}</div>
               </div>
 
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                🎒 {cls.starter}
+              {/* Generic Inventory (Template) */}
+              <div className="template-inventory-tag">
+                <span className="ti-label">Inventory&lt;shared_ptr&lt;Item&gt;&gt;</span>
+                <span className="ti-items">🎒 {cls.starterItems}</span>
               </div>
             </div>
           );
         })}
       </div>
 
+      {/* Lock In Actions */}
       <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-        {!players[1] ? (
-          <div style={{ color: '#f59e0b', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-            ⏳ Waiting for Player 2 to join room "{roomCode}" before the match can begin...
+        {!bothPlayersJoined ? (
+          <div className="waiting-notice-banner">
+            <span className="pulse-dot"></span>
+            <span>Awaiting Player 2 to join room "{roomCode}" before lock-in is allowed...</span>
           </div>
-        ) : null}
+        ) : (
+          isReady && !bothReady && (
+            <div className="waiting-notice-banner">
+              <span className="pulse-dot"></span>
+              <span>Locked in! Waiting for opponent to confirm their archetype...</span>
+            </div>
+          )
+        )}
 
         <button
           className="btn btn-primary"
           onClick={handleConfirm}
-          disabled={isReady || !players[1]}
-          style={{ padding: '0.9rem 2.5rem', fontSize: '1.05rem' }}
+          disabled={isReady || !bothPlayersJoined}
+          style={{ padding: '0.9rem 2.8rem', fontSize: '1.05rem' }}
         >
           {isReady ? '✓ Locked In! Awaiting Opponent...' : `Lock In as ${selectedClass}`}
         </button>

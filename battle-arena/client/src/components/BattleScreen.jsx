@@ -1,5 +1,17 @@
+/**
+ * BattleScreen.jsx
+ * Primary combat interface orchestrating the Arena stage, C++ call trace telemetry,
+ * animated architectural pipeline, combat command console, and victory resolution.
+ */
 import React, { useState, useEffect, useRef } from 'react';
+import ArchitecturePipeline from './ArchitecturePipeline';
+import FighterCard from './FighterCard';
+import ActionBar from './ActionBar';
+import BattleLog from './BattleLog';
+import TracePanel from './TracePanel';
 import ItemModal from './ItemModal';
+import WinnerOverlay from './WinnerOverlay';
+import { buildTraceEntry } from '../utils/traceHelper';
 
 export default function BattleScreen({
   gameState,
@@ -8,12 +20,30 @@ export default function BattleScreen({
   onSaveMatch,
   onPlayAgain,
   gameError,
-  savedFileNotice
+  savedFileNotice,
+  presentationMode = false,
+  onOpenConcepts
 }) {
   const [showItemModal, setShowItemModal] = useState(false);
-  const [hitShakeIndex, setHitShakeIndex] = useState(null);
-  const prevHealths = useRef([null, null]);
-  const logEndRef = useRef(null);
+  const [isTraceOpen, setIsTraceOpen] = useState(true);
+  const [traces, setTraces] = useState([]);
+  const [demonstratedConcepts, setDemonstratedConcepts] = useState([
+    'inheritance',
+    'abstraction',
+    'static_members',
+    'polymorphism',
+    'encapsulation',
+    'templates'
+  ]);
+
+  // Telemetry pipeline animation triggers
+  const [isPulsingOut, setIsPulsingOut] = useState(false);
+  const [isPulsingIn, setIsPulsingIn] = useState(false);
+  const [lastActionName, setLastActionName] = useState('');
+
+  // Floating combat numbers per fighter index
+  const [floaters, setFloaters] = useState({ 0: [], 1: [] });
+  const prevPlayersRef = useRef(gameState?.players || []);
 
   const players = gameState?.players || [];
   const currentTurn = gameState?.turn;
@@ -26,30 +56,153 @@ export default function BattleScreen({
   const me = players[playerIndex];
   const opponent = players[1 - playerIndex];
 
-  // Auto scroll log to bottom
+  // If presentation mode turned on, ensure trace panel is open
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [log]);
+    if (presentationMode) {
+      setIsTraceOpen(true);
+    }
+  }, [presentationMode]);
 
-  // Trigger shake animation when a player loses HP
+  // Initial trace entry on mount
   useEffect(() => {
-    players.forEach((p, idx) => {
-      if (prevHealths.current[idx] !== null && p.health < prevHealths.current[idx]) {
-        setHitShakeIndex(idx);
-        setTimeout(() => setHitShakeIndex(null), 500);
-      }
-      prevHealths.current[idx] = p.health;
-    });
+    if (players.length >= 2 && traces.length === 0) {
+      const initTrace = buildTraceEntry({
+        type: 'start',
+        action: 'start',
+        actor: players[0],
+        target: players[1],
+        round: 1
+      });
+      setTraces([initTrace]);
+    }
   }, [players]);
 
-  const handleAction = (action, itemIndex = 0) => {
-    if (!isMyTurn) return;
-    onAction(action, itemIndex);
+  // Detect state updates: trigger return pulse and calculate floating damage/heal numbers
+  useEffect(() => {
+    if (!gameState) return;
+
+    // Trigger return telemetry wave
+    setIsPulsingOut(false);
+    setIsPulsingIn(true);
+    const returnTimer = setTimeout(() => setIsPulsingIn(false), 900);
+
+    // Compute floaters by comparing previous and current health / mana
+    const prevPlayers = prevPlayersRef.current;
+    if (prevPlayers.length >= 2 && players.length >= 2) {
+      players.forEach((curr, idx) => {
+        const prev = prevPlayers[idx];
+        if (prev) {
+          const hpDiff = curr.health - prev.health;
+          const mpDiff = curr.mana - prev.mana;
+
+          if (hpDiff < 0) {
+            addFloater(idx, `${hpDiff} HP`, 'damage');
+          } else if (hpDiff > 0) {
+            addFloater(idx, `+${hpDiff} HP`, 'heal');
+          }
+
+          if (mpDiff < 0 && hpDiff >= 0) {
+            addFloater(idx, `${mpDiff} MP`, 'mana-spend');
+          } else if (mpDiff > 0) {
+            addFloater(idx, `+${mpDiff} MP`, 'mana-gain');
+          }
+        }
+      });
+    }
+
+    prevPlayersRef.current = players;
+
+    return () => clearTimeout(returnTimer);
+  }, [gameState]);
+
+  // Listen for Random Events
+  useEffect(() => {
+    if (event && event !== 'The battle begins! Round 1!' && event !== 'Match initialized. Choose your action!') {
+      const eventTrace = buildTraceEntry({
+        action: 'event',
+        actor: me || { name: 'Player', class: 'Warrior' },
+        target: opponent || { name: 'Opponent', class: 'Mage' },
+        round,
+        eventName: event
+      });
+      appendTrace(eventTrace);
+    }
+  }, [event]);
+
+  // Listen for GameException errors
+  useEffect(() => {
+    if (gameError) {
+      const errTrace = buildTraceEntry({
+        action: 'error',
+        actor: me || { name: 'Player', class: 'Warrior' },
+        round,
+        errorMessage: gameError
+      });
+      appendTrace(errTrace);
+    }
+  }, [gameError]);
+
+  // Listen for match saved notices
+  useEffect(() => {
+    if (savedFileNotice) {
+      const saveTrace = buildTraceEntry({
+        action: 'save',
+        actor: me || { name: 'Player', class: 'Warrior' },
+        round,
+        savedFile: savedFileNotice
+      });
+      appendTrace(saveTrace);
+    }
+  }, [savedFileNotice]);
+
+  const addFloater = (targetIdx, text, type) => {
+    const newFloater = { id: Math.random().toString(), text, type };
+    setFloaters((prev) => ({
+      ...prev,
+      [targetIdx]: [...(prev[targetIdx] || []), newFloater]
+    }));
+
+    setTimeout(() => {
+      setFloaters((prev) => ({
+        ...prev,
+        [targetIdx]: (prev[targetIdx] || []).filter((f) => f.id !== newFloater.id)
+      }));
+    }, 1800);
   };
 
-  const handleUseItem = (index) => {
+  const appendTrace = (newTrace) => {
+    setTraces((prev) => [...prev, newTrace]);
+    if (newTrace.concepts) {
+      setDemonstratedConcepts((prev) => {
+        const set = new Set([...prev, ...newTrace.concepts]);
+        return Array.from(set);
+      });
+    }
+  };
+
+  // User actions triggered from ActionBar
+  const handleAction = (actionName, itemIndex = 0) => {
+    if (!isMyTurn) return;
+
+    setLastActionName(actionName);
+    setIsPulsingOut(true);
+
+    const actionTrace = buildTraceEntry({
+      action: actionName,
+      actor: me,
+      target: opponent,
+      round,
+      itemIndex,
+      itemName: actionName === 'item' && me?.inventory?.[itemIndex]?.name ? me.inventory[itemIndex].name : 'Health Potion'
+    });
+    appendTrace(actionTrace);
+
+    onAction(actionName, itemIndex);
+  };
+
+  const handleUseItem = (idx) => {
     setShowItemModal(false);
-    handleAction('item', index);
+    handleAction('item', idx);
   };
 
   const handleCombinePotions = () => {
@@ -57,256 +210,115 @@ export default function BattleScreen({
     handleAction('combine');
   };
 
-  const renderFighterCard = (fighter, index) => {
-    if (!fighter) return null;
-    const isThisMe = index === playerIndex;
-    const isTurn = currentTurn === index && winner === null;
-    const isShaking = hitShakeIndex === index;
-    const hpPercent = Math.max(0, Math.min(100, (fighter.health / fighter.maxHealth) * 100));
-    const mpPercent = fighter.maxMana > 0 ? Math.max(0, Math.min(100, (fighter.mana / fighter.maxMana) * 100)) : 0;
-    const isHpLow = hpPercent < 30;
-
-    return (
-      <div
-        key={index}
-        className={`fighter-card ${isTurn ? 'active-turn' : ''} ${isShaking ? 'hit-shake' : ''}`}
-      >
-        <div className="fighter-header">
-          <div>
-            <span className="fighter-role">
-              {isThisMe ? '⭐ YOU' : '⚔ OPPONENT'} (P{index + 1})
-            </span>
-            <div className="fighter-name">{fighter.name}</div>
-          </div>
-          <div className="oop-badge">
-            {fighter.class}
-          </div>
-        </div>
-
-        {/* Health & Mana Meters */}
-        <div className="meter-container">
-          <div className="meter-wrapper">
-            <div className="meter-label">
-              <span>HEALTH (HP)</span>
-              <span>{fighter.health} / {fighter.maxHealth}</span>
-            </div>
-            <div className="meter-bar">
-              <div
-                className={`meter-fill health ${isHpLow ? 'low' : ''}`}
-                style={{ width: `${hpPercent}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="meter-wrapper">
-            <div className="meter-label">
-              <span>MANA (MP)</span>
-              <span>{fighter.mana} / {fighter.maxMana}</span>
-            </div>
-            <div className="meter-bar">
-              <div
-                className="meter-fill mana"
-                style={{ width: `${mpPercent}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Combat Stats */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: '0.4rem',
-          background: 'rgba(0,0,0,0.25)',
-          padding: '0.6rem',
-          borderRadius: '8px',
-          fontSize: '0.75rem',
-          textAlign: 'center'
-        }}>
-          <div>
-            <div style={{ color: 'var(--text-muted)' }}>ATK</div>
-            <strong style={{ fontSize: '0.9rem' }}>{fighter.attackPower}</strong>
-          </div>
-          <div>
-            <div style={{ color: 'var(--text-muted)' }}>DEF</div>
-            <strong style={{ fontSize: '0.9rem' }}>{fighter.defense}</strong>
-          </div>
-          <div>
-            <div style={{ color: 'var(--text-muted)' }}>ITEMS</div>
-            <strong style={{ fontSize: '0.9rem' }}>{fighter.inventory?.length || 0}</strong>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', flex: 1 }}>
-      {/* Top Bar with Round and Status */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        background: 'var(--bg-card)',
-        padding: '0.8rem 1.2rem',
-        borderRadius: '10px',
-        border: '1px solid var(--bg-card-border)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ fontWeight: '800', color: 'var(--accent-gold)' }}>
-            ROUND {round}
-          </div>
-          <div style={{
-            fontSize: '0.85rem',
-            padding: '0.3rem 0.8rem',
-            borderRadius: '999px',
-            background: isMyTurn ? 'rgba(16, 185, 129, 0.2)' : 'rgba(107, 114, 128, 0.2)',
-            color: isMyTurn ? '#6ee7b7' : '#9ca3af',
-            fontWeight: '600'
-          }}>
-            {isMyTurn ? '🔥 YOUR TURN TO ACT!' : '⏳ Opponent is deciding...'}
-          </div>
-        </div>
+    <div className={`battle-screen-container ${presentationMode ? 'presentation-mode' : ''}`}>
+      {/* 1. Live IPC Telemetry Pipeline */}
+      <ArchitecturePipeline
+        isPulsingOut={isPulsingOut}
+        isPulsingIn={isPulsingIn}
+        lastAction={lastActionName}
+      />
 
-        <button
-          className="btn btn-secondary"
-          onClick={onSaveMatch}
-          style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}
-          title="Save match report to disk via C++ File I/O"
-        >
-          💾 Save Match (C++ File I/O)
-        </button>
-      </div>
-
-      {/* Error banner if action rejected by C++ engine */}
+      {/* 2. Error Banner (C++ GameException) */}
       {gameError && (
-        <div style={{
-          background: 'rgba(239, 68, 68, 0.2)',
-          border: '1px solid #ef4444',
-          borderRadius: '8px',
-          padding: '0.75rem 1rem',
-          color: '#fca5a5',
-          fontSize: '0.9rem',
-          fontWeight: '600',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem'
-        }}>
-          ⚠️ C++ Engine Exception: {gameError}
+        <div className="game-exception-banner" role="alert">
+          <div className="ge-icon">⚠️</div>
+          <div className="ge-body">
+            <div className="ge-title">GameException Thrown by C++ Engine:</div>
+            <div className="ge-msg">{gameError}</div>
+          </div>
+          <span className="ge-badge">Exception Handling</span>
         </div>
       )}
 
-      {/* Saved match notification */}
-      {savedFileNotice && (
-        <div style={{
-          background: 'rgba(16, 185, 129, 0.2)',
-          border: '1px solid #10b981',
-          borderRadius: '8px',
-          padding: '0.75rem 1rem',
-          color: '#a7f3d0',
-          fontSize: '0.85rem'
-        }}>
-          ✓ Match chronicle successfully archived to <code style={{ color: '#fff' }}>{savedFileNotice}</code> on server host!
-        </div>
-      )}
-
-      {/* Arena Random Event Banner */}
+      {/* 3. Random Environmental Arena Event Banner */}
       {event && (
-        <div className="event-banner">
-          <span style={{ fontSize: '1.4rem' }}>⚡</span>
-          <div>
-            <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--accent-gold)' }}>
-              Arena Environment Event
-            </div>
-            <div>{event}</div>
+        <div className={`random-event-banner ${getEventColorClass(event)}`}>
+          <span className="event-icon">{getEventIcon(event)}</span>
+          <div className="event-content">
+            <div className="event-title-tag">Arena Environmental Phenomenon:</div>
+            <div className="event-desc">{event}</div>
           </div>
+          <span className="event-vtable-badge">Polymorphic Event</span>
         </div>
       )}
 
-      {/* Main Battle Grid */}
-      <div className="battle-layout">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-          {/* Fighter Cards */}
-          <div className="fighters-grid">
-            {renderFighterCard(me, playerIndex)}
-            {renderFighterCard(opponent, 1 - playerIndex)}
-          </div>
-
-          {/* Action Buttons Panel */}
-          <div className="actions-panel">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                Combat Command Console
-              </span>
-              <span style={{ fontSize: '0.75rem', color: isMyTurn ? '#10b981' : '#ef4444' }}>
-                {isMyTurn ? 'Input Enabled' : 'Input Locked (Waiting for Turn)'}
-              </span>
-            </div>
-
-            <div className="actions-grid">
-              <button
-                className="btn action-btn attack"
-                onClick={() => handleAction('attack')}
-                disabled={!isMyTurn || winner !== null}
-              >
-                <span className="btn-icon">⚔️</span>
-                <span>Normal Attack</span>
-              </button>
-
-              <button
-                className="btn action-btn special"
-                onClick={() => handleAction('special')}
-                disabled={!isMyTurn || winner !== null}
-              >
-                <span className="btn-icon">💥</span>
-                <span>Special Move</span>
-              </button>
-
-              <button
-                className="btn action-btn item"
-                onClick={() => setShowItemModal(true)}
-                disabled={!isMyTurn || winner !== null}
-              >
-                <span className="btn-icon">🧪</span>
-                <span>Use Item ({me?.inventory?.length || 0})</span>
-              </button>
-
-              <button
-                className="btn action-btn skip"
-                onClick={() => handleAction('skip')}
-                disabled={!isMyTurn || winner !== null}
-              >
-                <span className="btn-icon">🛡️</span>
-                <span>Skip Turn</span>
-              </button>
-            </div>
+      {/* 4. Top Match Status & Controls Bar */}
+      <div className="battle-top-bar">
+        <div className="round-turn-status">
+          <span className="round-badge">ROUND {round}</span>
+          <div className={`turn-indicator-pill ${isMyTurn ? 'my-turn-pill' : 'opp-turn-pill'}`}>
+            <span className="pulse-indicator"></span>
+            <strong>{isMyTurn ? '🔥 YOUR TURN TO ACT' : `⏳ WAITING FOR ${opponent?.name || 'OPPONENT'}`}</strong>
           </div>
         </div>
 
-        {/* Battle Chronicle / Log */}
-        <div className="battle-log-card">
-          <h3 className="heading-font" style={{ fontSize: '1rem', marginBottom: '0.8rem', color: 'var(--accent-gold)' }}>
-            📜 Combat Chronicle
-          </h3>
-          <div className="log-content">
-            {log.map((entry, idx) => {
-              const isSpecial = entry.includes('[SPECIAL]');
-              const isEvent = entry.includes('⚡') || entry.includes('🌟') || entry.includes('🎁') || entry.includes('🩸');
-              return (
-                <div
-                  key={idx}
-                  className={`log-entry ${isSpecial ? 'special' : ''} ${isEvent ? 'event' : ''}`}
-                >
-                  {entry}
-                </div>
-              );
-            })}
-            <div ref={logEndRef} />
-          </div>
+        <div className="top-bar-actions">
+          <button
+            className="btn btn-secondary btn-save-match"
+            onClick={onSaveMatch}
+            title="Archive full combat report to disk via C++ std::ofstream file streams"
+          >
+            <span>💾</span>
+            <span>Save match (Arena::saveMatch - File Handling)</span>
+          </button>
         </div>
       </div>
 
-      {/* Item Modal */}
+      {/* 5. Main Arena Grid (Fighter Cards Stage, ActionBar, Log, Trace) */}
+      <div className="battle-arena-grid">
+        <div className="arena-combat-column">
+          {/* Dual Fighters Stage */}
+          <div className="fighters-stage-row">
+            <FighterCard
+              fighter={me}
+              index={playerIndex}
+              playerIndex={playerIndex}
+              isTurn={currentTurn === playerIndex && winner === null}
+              isAttacking={isMyTurn && isPulsingOut}
+              recentFloaters={floaters[playerIndex] || []}
+              onOpenInventory={() => setShowItemModal(true)}
+            />
+
+            <div className="arena-versus-divider" aria-hidden="true">
+              <span>VS</span>
+            </div>
+
+            <FighterCard
+              fighter={opponent}
+              index={1 - playerIndex}
+              playerIndex={playerIndex}
+              isTurn={currentTurn === (1 - playerIndex) && winner === null}
+              isAttacking={!isMyTurn && isPulsingOut}
+              recentFloaters={floaters[1 - playerIndex] || []}
+              onOpenInventory={() => {}}
+            />
+          </div>
+
+          {/* Player Command Console */}
+          <ActionBar
+            isMyTurn={isMyTurn}
+            isGameOver={winner !== null}
+            currentFighter={me}
+            onAction={handleAction}
+            onOpenInventory={() => setShowItemModal(true)}
+          />
+
+          {/* Combat Log Chronicle */}
+          <BattleLog log={log} />
+        </div>
+
+        {/* 6. Live C++ Engine Trace Panel */}
+        <TracePanel
+          traces={traces}
+          isOpen={isTraceOpen}
+          onToggle={() => setIsTraceOpen(!isTraceOpen)}
+          demonstratedConcepts={demonstratedConcepts}
+          onOpenConceptsDrawer={onOpenConcepts}
+        />
+      </div>
+
+      {/* 7. Inventory & Potion Combiner Modal */}
       {showItemModal && me && (
         <ItemModal
           inventory={me.inventory || []}
@@ -316,47 +328,34 @@ export default function BattleScreen({
         />
       )}
 
-      {/* Game Over / Winner Modal */}
+      {/* 8. Winner & Replay Modal */}
       {winner !== null && (
-        <div className="winner-modal">
-          <div className="winner-card">
-            <div className="winner-trophy">
-              {winner === -2 ? '🤝' : (winner === playerIndex ? '👑' : '💀')}
-            </div>
-
-            <h2 className="heading-font" style={{ fontSize: '1.8rem', color: 'var(--accent-gold)' }}>
-              {winner === -2
-                ? 'MUTUAL DEFEAT'
-                : (winner === playerIndex ? 'VICTORY ACHIEVED!' : 'DEFEAT')}
-            </h2>
-
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-              {winner === -2
-                ? 'Both warriors fell in the heat of battle! The duel ends in a tie.'
-                : (winner === playerIndex
-                    ? `Congratulations! ${me?.name} has triumphed in the arena!`
-                    : `${opponent?.name} emerged as the arena champion.`)}
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginTop: '0.5rem' }}>
-              <button
-                className="btn btn-primary"
-                onClick={onPlayAgain}
-                style={{ padding: '0.8rem' }}
-              >
-                🔄 Play Again (Rematch)
-              </button>
-              <button
-                className="btn btn-secondary"
-                onClick={onSaveMatch}
-                style={{ padding: '0.7rem' }}
-              >
-                💾 Export Match Log to File
-              </button>
-            </div>
-          </div>
-        </div>
+        <WinnerOverlay
+          winnerIndex={winner}
+          playerIndex={playerIndex}
+          players={players}
+          roundNumber={round}
+          savedFileName={savedFileNotice}
+          onPlayAgain={onPlayAgain}
+          onSaveMatch={onSaveMatch}
+        />
       )}
     </div>
   );
+}
+
+function getEventIcon(eventText) {
+  if (eventText.includes('⚡') || eventText.includes('Lightning')) return '⚡';
+  if (eventText.includes('🌟') || eventText.includes('Blessing')) return '🌟';
+  if (eventText.includes('🎁') || eventText.includes('crate') || eventText.includes('supply')) return '🎁';
+  if (eventText.includes('🩸') || eventText.includes('Blood')) return '🩸';
+  return '⚔️';
+}
+
+function getEventColorClass(eventText) {
+  if (eventText.includes('⚡') || eventText.includes('Lightning')) return 'event-lightning';
+  if (eventText.includes('🌟') || eventText.includes('Blessing')) return 'event-blessing';
+  if (eventText.includes('🎁') || eventText.includes('crate')) return 'event-crate';
+  if (eventText.includes('🩸') || eventText.includes('Blood')) return 'event-blood';
+  return 'event-default';
 }
