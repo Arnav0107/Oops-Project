@@ -1,0 +1,23 @@
+# Node dependencies & build outputs
+node_modules/
+dist/
+.vite/
+
+# Compiled C++ binaries and object files
+*.exe
+*.o
+*.obj
+build/
+bin/
+
+# Temporary and log files
+match_history.txt
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
