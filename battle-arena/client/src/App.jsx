@@ -23,7 +23,7 @@ const getInitialServerUrl = () => {
       return `http://${hostname}:3001`;
     }
   }
-  return '';
+  return 'https://battle-arena-server-sutp.onrender.com';
 };
 
 export default function App() {
