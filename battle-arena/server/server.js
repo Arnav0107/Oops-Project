@@ -72,6 +72,32 @@ function resolveEnginePath() {
 
 const ENGINE_PATH = resolveEnginePath();
 
+// Active rooms in memory
+// Key: roomCode -> { code, players: [{id, name, class, ready}], engine: ChildProcess, rl: Readline, turn: 0, pendingSocket: null, state: null }
+const rooms = new Map();
+
+function generateRoomCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 4; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
+function getLocalIpAddresses() {
+  const interfaces = os.networkInterfaces();
+  const addresses = [];
+  for (const k in interfaces) {
+    for (const addr of interfaces[k]) {
+      if (addr.family === 'IPv4' && !addr.internal) {
+        addresses.push(addr.address);
+      }
+    }
+  }
+  return addresses;
+}
+
 // Root endpoint for Render / PaaS deployment health checks
 app.get('/', (req, res) => {
   res.json({
