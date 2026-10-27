@@ -9,13 +9,25 @@ import ConceptsDrawer from './components/ConceptsDrawer';
 import HowToPlayModal from './components/HowToPlayModal';
 import Toast from './components/Toast';
 
-const DEFAULT_SERVER = import.meta.env.VITE_SERVER_URL || 
-  (typeof window !== 'undefined' && window.location.hostname 
-    ? `http://${window.location.hostname}:3001` 
-    : 'http://localhost:3001');
+const getInitialServerUrl = () => {
+  if (import.meta.env.VITE_SERVER_URL) {
+    return import.meta.env.VITE_SERVER_URL;
+  }
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('battle_arena_server_url');
+    if (saved) return saved;
+
+    const hostname = window.location.hostname;
+    // Local development or local Wi-Fi IP
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
+      return `http://${hostname}:3001`;
+    }
+  }
+  return '';
+};
 
 export default function App() {
-  const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER);
+  const [serverUrl, setServerUrl] = useState(getInitialServerUrl);
   const [isConnected, setIsConnected] = useState(false);
   const [screen, setScreen] = useState('home'); // 'home' | 'select' | 'battle'
   const [roomCode, setRoomCode] = useState('');
@@ -174,6 +186,13 @@ export default function App() {
     socketRef.current?.emit('play_again');
   };
 
+  const handleServerUrlChange = (newUrl) => {
+    setServerUrl(newUrl);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('battle_arena_server_url', newUrl);
+    }
+  };
+
   return (
     <div className={`app-container ${presentationMode ? 'presentation-mode' : ''}`}>
       {/* Toast Notification Container */}
@@ -197,7 +216,8 @@ export default function App() {
             onJoinRoom={handleJoinRoom}
             error={error}
             serverUrl={serverUrl}
-            setServerUrl={setServerUrl}
+            setServerUrl={handleServerUrlChange}
+            isConnected={isConnected}
             onOpenConcepts={() => setIsConceptsOpen(true)}
             onOpenGuide={() => setIsGuideOpen(true)}
           />

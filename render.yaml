@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: battle-arena-server
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm run render-build
+    startCommand: npm run start:server
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 18

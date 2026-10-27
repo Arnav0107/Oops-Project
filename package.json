@@ -1,0 +1,17 @@
+{
+  "name": "battle-arena-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Battle Arena - C++17 OOP Project with Node Relay Server and React Frontend",
+  "scripts": {
+    "render-build": "cd battle-arena/server && npm install && npm run build",
+    "start:server": "cd battle-arena/server && npm start",
+    "build:server": "cd battle-arena/server && npm install && npm run build",
+    "build:client": "cd battle-arena/client && npm install && npm run build",
+    "build": "cd battle-arena/server && npm install && npm run build",
+    "start": "cd battle-arena/server && npm start"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

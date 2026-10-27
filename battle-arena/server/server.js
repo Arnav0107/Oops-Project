@@ -7,6 +7,8 @@ const path = require('path');
 const readline = require('readline');
 const os = require('os');
 
+const fs = require('fs');
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -20,43 +22,75 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 3001;
-
-// Path to C++ compiled engine executable
 const isWindows = process.platform === 'win32';
-const ENGINE_PATH = path.join(__dirname, '..', 'engine', isWindows ? 'battle_engine.exe' : 'battle_engine');
 
-// Active rooms in memory
-// Key: roomCode -> { code, players: [{id, name, class, ready}], engine: ChildProcess, rl: Readline, turn: 0, pendingSocket: null, state: null }
-const rooms = new Map();
+// Dynamic path resolution for C++ compiled engine executable
+function resolveEnginePath() {
+  const binaryName = isWindows ? 'battle_engine.exe' : 'battle_engine';
+  const candidates = [
+    process.env.ENGINE_PATH,
+    path.join(__dirname, '..', 'engine', binaryName),
+    path.join(__dirname, '..', 'engine', 'battle_engine'),
+    path.join(__dirname, binaryName),
+    path.join(process.cwd(), 'battle-arena', 'engine', binaryName),
+    path.join(process.cwd(), 'engine', binaryName)
+  ].filter(Boolean);
 
-function generateRoomCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 4; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
-
-function getLocalIpAddresses() {
-  const interfaces = os.networkInterfaces();
-  const addresses = [];
-  for (const k in interfaces) {
-    for (const addr of interfaces[k]) {
-      if (addr.family === 'IPv4' && !addr.internal) {
-        addresses.push(addr.address);
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      if (!isWindows) {
+        try { fs.chmodSync(candidate, 0o755); } catch (e) {}
       }
+      return candidate;
     }
   }
-  return addresses;
+
+  // If binary doesn't exist yet, attempt automatic compile using build-engine.js
+  const buildScriptPath = path.join(__dirname, 'build-engine.js');
+  if (fs.existsSync(buildScriptPath)) {
+    console.log('[Server Startup] Engine binary not found. Triggering build-engine.js...');
+    try {
+      const { execSync } = require('child_process');
+      execSync(`node "${buildScriptPath}"`, { stdio: 'inherit' });
+    } catch (buildErr) {
+      console.error('[Server Startup] Automatic build failed:', buildErr.message);
+    }
+  }
+
+  // Re-check after build attempt
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      if (!isWindows) {
+        try { fs.chmodSync(candidate, 0o755); } catch (e) {}
+      }
+      return candidate;
+    }
+  }
+
+  return path.join(__dirname, '..', 'engine', binaryName);
 }
+
+const ENGINE_PATH = resolveEnginePath();
+
+// Root endpoint for Render / PaaS deployment health checks
+app.get('/', (req, res) => {
+  res.json({
+    status: 'healthy',
+    service: 'Battle Arena C++ Relay Server',
+    engineFound: fs.existsSync(ENGINE_PATH),
+    engineBinary: ENGINE_PATH,
+    activeRooms: rooms.size,
+    uptime: process.uptime()
+  });
+});
 
 // REST health check
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     activeRooms: rooms.size,
-    engineBinary: ENGINE_PATH
+    engineBinary: ENGINE_PATH,
+    engineFound: fs.existsSync(ENGINE_PATH)
   });
 });
 

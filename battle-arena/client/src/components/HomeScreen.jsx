@@ -13,6 +13,7 @@ export default function HomeScreen({
   error,
   serverUrl,
   setServerUrl,
+  isConnected,
   onOpenConcepts,
   onOpenGuide
 }) {
@@ -86,6 +87,13 @@ export default function HomeScreen({
         {(error || validationError) && (
           <div className="alert-box alert-error" role="alert">
             ⚠️ {validationError || error}
+          </div>
+        )}
+
+        {/* Cloud deployment connection reminder */}
+        {!serverUrl && (
+          <div className="alert-box" style={{ background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.4)', color: '#fef3c7', fontSize: '0.82rem', marginBottom: '1rem', lineHeight: '1.4' }}>
+            🌐 <strong>Render Backend Connection:</strong> Enter your Render service URL below (e.g. <code>https://battle-arena-server.onrender.com</code>) or set <code>VITE_SERVER_URL</code> in Vercel to connect!
           </div>
         )}
 

@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "build": "node build-engine.js",
     "dev": "node server.js",
     "test": "node test_e2e.js"
   },
