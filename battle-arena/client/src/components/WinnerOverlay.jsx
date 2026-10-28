@@ -1,10 +1,5 @@
-/**
- * WinnerOverlay.jsx
- * Presentation modal rendered when a victor or draw is resolved.
- * Explains that the outcome was computed by C++ Arena::checkWinner(),
- * visualizes final statistics, confetti effects, and offers replay export options.
- */
 import React from 'react';
+import { Trophy, RotateCcw, Save } from 'lucide-react';
 
 export default function WinnerOverlay({
   winnerIndex,
@@ -22,89 +17,59 @@ export default function WinnerOverlay({
 
   const me = players[playerIndex];
   const opponent = players[1 - playerIndex];
-  const champion = !isDraw && players[winnerIndex] ? players[winnerIndex] : null;
 
   return (
-    <div className="winner-overlay-backdrop" role="dialog" aria-modal="true">
-      {/* Confetti particles for victory */}
-      {isVictorious && (
-        <div className="confetti-container" aria-hidden="true">
-          {[...Array(24)].map((_, i) => (
-            <div key={i} className={`confetti-piece piece-${i % 6}`} />
-          ))}
-        </div>
-      )}
-
-      <div className={`winner-card-panel ${isVictorious ? 'victory-glow' : ''}`}>
-        {/* Top Trophy Icon */}
-        <div className="winner-trophy-symbol">
-          {isDraw ? '🤝' : (isVictorious ? '👑' : '💀')}
+    <div className="modal-backdrop" role="dialog" aria-modal="true">
+      <div className="modal-box winner-box">
+        <div className="winner-icon-wrap">
+          <Trophy size={40} strokeWidth={2} className="trophy-icon" />
         </div>
 
-        <div className="engine-resolution-chip">
-          Resolved by <code>Arena::checkWinner()</code>
-        </div>
-
-        <h2 className="winner-main-title heading-font">
-          {isDraw
-            ? 'MUTUAL DEFEAT (DRAW)'
-            : (isVictorious ? 'VICTORY ACHIEVED!' : 'DEFEAT')}
+        <h2 className="winner-title">
+          {isDraw ? 'Draw!' : isVictorious ? 'Victory!' : 'Defeat'}
         </h2>
 
-        <p className="winner-summary-text">
+        <p className="winner-message">
           {isDraw
-            ? 'Both champions collapsed simultaneously! The match concluded in an honorable tie.'
-            : (isVictorious
-                ? `Congratulations! ${me?.name} (${me?.class}) dominated the Arena!`
-                : `${opponent?.name} (${opponent?.class}) has triumphed in the Arena.`)}
+            ? 'Both fighters collapsed simultaneously. The match ended in a tie.'
+            : isVictorious
+            ? `${me?.name || 'You'} won the match.`
+            : `${opponent?.name || 'Opponent'} won the match.`}
         </p>
 
-        {/* Final Statistics Comparison */}
-        <div className="final-stats-comparison">
-          <div className="fsc-header">
-            <span>FINAL COMBATANT STATUS (ROUNDS: {roundNumber})</span>
+        <div className="winner-stats-card">
+          <div className="winner-stats-row">
+            <span className="stats-label">Rounds played</span>
+            <span className="stats-value">{roundNumber}</span>
           </div>
-
-          <div className="fsc-row">
-            <div className="fsc-fighter">
-              <span className="fsc-role">{isVictorious ? '🏆 Champion' : 'Fighter'}:</span>
-              <strong>{me?.name} ({me?.class})</strong>
-              <span className="fsc-hp">HP: {me?.health} / {me?.maxHealth}</span>
-            </div>
-
-            <div className="fsc-vs">VS</div>
-
-            <div className="fsc-fighter">
-              <span className="fsc-role">{!isVictorious && !isDraw ? '🏆 Champion' : 'Fighter'}:</span>
-              <strong>{opponent?.name} ({opponent?.class})</strong>
-              <span className="fsc-hp">HP: {opponent?.health} / {opponent?.maxHealth}</span>
-            </div>
+          <div className="winner-stats-row">
+            <span className="stats-label">{me?.name || 'You'} final HP</span>
+            <span className="stats-value">
+              {Math.max(0, me?.health || 0)} / {me?.maxHealth || 100}
+            </span>
+          </div>
+          <div className="winner-stats-row">
+            <span className="stats-label">{opponent?.name || 'Opponent'} final HP</span>
+            <span className="stats-value">
+              {Math.max(0, opponent?.health || 0)} / {opponent?.maxHealth || 100}
+            </span>
           </div>
         </div>
 
-        {/* Persistence Notice if saved */}
         {savedFileName && (
-          <div className="saved-file-alert">
-            ✓ Match chronicle archived via <code>Arena::saveMatch("{savedFileName}")</code>!
+          <div className="file-saved-note">
+            Match report saved to {savedFileName}
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="winner-actions-group">
-          <button
-            className="btn btn-primary"
-            onClick={onPlayAgain}
-            style={{ padding: '0.85rem', width: '100%' }}
-          >
-            🔄 Play Again (Arena::startMatch)
+        <div className="winner-actions">
+          <button type="button" className="btn-primary full-width" onClick={onPlayAgain}>
+            <RotateCcw size={16} strokeWidth={2} />
+            <span>Play again</span>
           </button>
-
-          <button
-            className="btn btn-secondary"
-            onClick={onSaveMatch}
-            style={{ padding: '0.8rem', width: '100%' }}
-          >
-            💾 Save Match (Arena::saveMatch - File Handling)
+          <button type="button" className="btn-secondary full-width" onClick={onSaveMatch}>
+            <Save size={16} strokeWidth={2} />
+            <span>Save match</span>
           </button>
         </div>
       </div>

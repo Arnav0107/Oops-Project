@@ -1,11 +1,6 @@
-/**
- * FighterCard.jsx
- * Visualizes a combatant in the Arena stage.
- * Demonstrates Encapsulation (protected fields accessed via getters),
- * Templates (Inventory container), and displays animated HP/MP meters with ghost damage trails.
- */
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
 import ClassAvatar from './ClassAvatar';
+import { Backpack } from 'lucide-react';
 
 export default function FighterCard({
   fighter,
@@ -19,191 +14,104 @@ export default function FighterCard({
   const isMe = index === playerIndex;
   const isDead = fighter && fighter.health <= 0;
 
-  // Delayed ghost bar for smooth HP loss visual trail
-  const [ghostHpPercent, setGhostHpPercent] = useState(100);
-  const prevHpRef = useRef(fighter?.health || 100);
-
-  const hpPercent = fighter ? Math.max(0, Math.min(100, (fighter.health / fighter.maxHealth) * 100)) : 100;
-  const mpPercent = fighter && fighter.maxMana > 0 ? Math.max(0, Math.min(100, (fighter.mana / fighter.maxMana) * 100)) : 0;
-  const isLowHp = hpPercent <= 30 && !isDead;
-
-  useEffect(() => {
-    if (fighter) {
-      if (fighter.health < prevHpRef.current) {
-        // Delay ghost catch-up
-        const timer = setTimeout(() => {
-          setGhostHpPercent(hpPercent);
-        }, 500);
-        return () => clearTimeout(timer);
-      } else {
-        setGhostHpPercent(hpPercent);
-      }
-      prevHpRef.current = fighter.health;
-    }
-  }, [fighter?.health, hpPercent]);
-
-  // Active tooltip state for mobile tap
-  const [activeTooltip, setActiveTooltip] = useState(null);
-
-  const toggleTooltip = (key) => {
-    setActiveTooltip(activeTooltip === key ? null : key);
-  };
-
   if (!fighter) return null;
+
+  const hpPercent = Math.max(0, Math.min(100, (fighter.health / fighter.maxHealth) * 100));
+  const mpPercent = fighter.maxMana > 0 ? Math.max(0, Math.min(100, (fighter.mana / fighter.maxMana) * 100)) : 0;
+  const isLowHp = hpPercent <= 25 && !isDead;
 
   return (
     <div
-      className={`fighter-card ${isTurn ? 'active-turn' : ''} ${isDead ? 'fighter-defeated' : ''}`}
-      aria-label={`${fighter.name} combat card`}
+      className={`fighter-card ${isTurn ? 'is-active-turn' : ''} ${isDead ? 'is-defeated' : ''}`}
+      aria-label={`${fighter.name} card`}
     >
-      {/* Floating combat numbers over avatar */}
+      {/* Floating combat numbers */}
       <div className="floater-container" aria-hidden="true">
         {recentFloaters.map((fl) => (
-          <div key={fl.id} className={`combat-number float-${fl.type}`}>
+          <div key={fl.id} className={`combat-floater float-${fl.type}`}>
             {fl.text}
           </div>
         ))}
       </div>
 
-      {/* Card Header */}
-      <div className="fighter-top-row">
-        <div>
-          <span className="fighter-role-tag">
-            {isMe ? '⭐ YOU' : '⚔ OPPONENT'} (P{index + 1})
-          </span>
-          <h3 className="fighter-name heading-font">{fighter.name}</h3>
-          <div className="fighter-cpp-class">
-            <code>class {fighter.class} : public Character</code>
-          </div>
+      {/* Fighter Card Header */}
+      <div className="fighter-header">
+        <div className="fighter-meta">
+          <span className="fighter-badge">{isMe ? 'You' : 'Opponent'}</span>
+          <h3 className="fighter-name">{fighter.name}</h3>
         </div>
-
-        <div className="class-badge" title="Derived concrete class inheriting from Character">
-          {fighter.class}
-        </div>
+        <span className="fighter-class-tag">{fighter.class}</span>
       </div>
 
-      {/* Portrait Stage */}
-      <div className="fighter-stage-box">
+      {/* Avatar Box */}
+      <div className="fighter-avatar-wrap">
         <ClassAvatar
           characterClass={fighter.class}
           isAttacking={isAttacking}
-          isHit={fighter.health < prevHpRef.current}
+          isHit={fighter.health < fighter.maxHealth && isTurn === false}
           isOpponent={!isMe}
-          size={110}
+          size={88}
         />
-        {isTurn && (
-          <div className="active-turn-ring">
-            <span>ACTIVE TURN</span>
-          </div>
-        )}
+        {isTurn && <div className="turn-tag">Active turn</div>}
       </div>
 
-      {/* Encapsulated Stat Bars */}
+      {/* Health & Mana Meters */}
       <div className="meter-stack">
-        {/* HEALTH METER */}
-        <div className="stat-meter-box">
-          <div className="meter-info-line">
-            <span className="stat-label">
-              <span className="stat-name">HP</span>
-              <code className="cpp-var-label">Character::health</code>
-              <button
-                type="button"
-                className="btn-info-tooltip"
-                onClick={() => toggleTooltip('hp')}
-                title="Encapsulation: Protected field accessed via getHealth() and clamped via setHealth()"
-                aria-label="Explain Health encapsulation"
-              >
-                ?
-              </button>
-            </span>
-            <span className="stat-values">
-              <strong>{fighter.health}</strong> / {fighter.maxHealth}
+        {/* Health */}
+        <div className="meter-block">
+          <div className="meter-label-row">
+            <span className="meter-name">HP</span>
+            <span className="meter-nums">
+              {fighter.health} / {fighter.maxHealth}
             </span>
           </div>
-
-          {activeTooltip === 'hp' && (
-            <div className="inline-tooltip">
-              <strong>Encapsulation:</strong> <code>protected int health</code> is modified only through <code>setHealth(int)</code>, which guarantees bounds checking [0, maxHealth].
-            </div>
-          )}
-
-          <div className="meter-track health-track">
-            {/* Delayed ghost trail */}
+          <div className="meter-track">
             <div
-              className="meter-fill-ghost"
-              style={{ width: `${ghostHpPercent}%` }}
-              aria-hidden="true"
-            />
-            {/* Primary bar */}
-            <div
-              className={`meter-fill-main health-fill ${isLowHp ? 'pulsing-low' : ''}`}
+              className={`meter-bar hp-bar ${isLowHp ? 'hp-danger' : ''}`}
               style={{ width: `${hpPercent}%` }}
             />
           </div>
         </div>
 
-        {/* MANA METER */}
-        <div className="stat-meter-box">
-          <div className="meter-info-line">
-            <span className="stat-label">
-              <span className="stat-name">MP</span>
-              <code className="cpp-var-label">Character::mana</code>
-              <button
-                type="button"
-                className="btn-info-tooltip"
-                onClick={() => toggleTooltip('mp')}
-                title="Encapsulation: Protected mana pool consumed by specialMove()"
-                aria-label="Explain Mana encapsulation"
-              >
-                ?
-              </button>
-            </span>
-            <span className="stat-values">
-              <strong>{fighter.mana}</strong> / {fighter.maxMana}
+        {/* Mana */}
+        <div className="meter-block">
+          <div className="meter-label-row">
+            <span className="meter-name">Mana</span>
+            <span className="meter-nums">
+              {fighter.mana} / {fighter.maxMana}
             </span>
           </div>
-
-          {activeTooltip === 'mp' && (
-            <div className="inline-tooltip">
-              <strong>Encapsulation:</strong> <code>protected int mana</code> is decremented by polymorphic spells and replenished by ManaPotions.
-            </div>
-          )}
-
-          <div className="meter-track mana-track">
+          <div className="meter-track">
             <div
-              className="meter-fill-main mana-fill"
+              className="meter-bar mana-bar"
               style={{ width: `${mpPercent}%` }}
             />
           </div>
         </div>
       </div>
 
-      {/* Combat Properties Grid */}
-      <div className="combat-stats-grid">
-        <div className="combat-stat-cell" title="Protected attackPower field">
-          <span className="cs-label">ATK</span>
-          <span className="cs-val">{fighter.attackPower}</span>
-          <code className="cs-cpp">attackPower</code>
+      {/* Stats and Bag */}
+      <div className="fighter-stats-row">
+        <div className="stat-pill">
+          <span className="pill-name">Attack</span>
+          <span className="pill-val">{fighter.attackPower}</span>
         </div>
-
-        <div className="combat-stat-cell" title="Protected defense field (mitigates raw damage)">
-          <span className="cs-label">DEF</span>
-          <span className="cs-val">{fighter.defense}</span>
-          <code className="cs-cpp">defense</code>
+        <div className="stat-pill">
+          <span className="pill-name">Defense</span>
+          <span className="pill-val">{fighter.defense}</span>
         </div>
-
-        <div
-          className="combat-stat-cell inventory-cell"
+        <button
+          type="button"
+          className="stat-pill stat-bag-btn"
           onClick={isMe ? onOpenInventory : undefined}
-          title="Generic Template: Inventory<std::shared_ptr<Item>>"
-          style={{ cursor: isMe ? 'pointer' : 'default' }}
+          disabled={!isMe}
+          title={isMe ? 'Open inventory' : undefined}
+          aria-label={isMe ? 'Open inventory' : 'Opponent items'}
         >
-          <span className="cs-label">BAG</span>
-          <span className="cs-val">
-            {fighter.inventory?.length || 0}/6
-          </span>
-          <code className="cs-cpp">Inventory&lt;T&gt;</code>
-        </div>
+          <Backpack size={13} strokeWidth={2} />
+          <span className="pill-name">Bag</span>
+          <span className="pill-val">{fighter.inventory?.length || 0}/6</span>
+        </button>
       </div>
     </div>
   );

@@ -1,16 +1,11 @@
-/**
- * ActionBar.jsx
- * Player command console for executing combat actions.
- * Explicitly associates each button with its pure virtual method contract in C++ (attack(), specialMove()),
- * displays resource constraints, and clearly articulates disabled reasons.
- */
 import React from 'react';
+import { Sword, Zap, FlaskConical, SkipForward } from 'lucide-react';
 
-const SPECIAL_MOVE_INFO = {
-  Warrior: { name: 'Berserk', cost: 0, desc: 'Double damage, 25% recoil' },
-  Mage: { name: 'Fireball', cost: 30, desc: 'Massive burst spell' },
-  Archer: { name: 'Multi-shot', cost: 20, desc: '3 rapid arrow strikes' },
-  Healer: { name: 'Soul Drain', cost: 25, desc: 'Siphons HP from enemy' }
+const SPECIAL_MOVE_COSTS = {
+  Warrior: 0,
+  Mage: 30,
+  Archer: 20,
+  Healer: 25
 };
 
 export default function ActionBar({
@@ -21,109 +16,103 @@ export default function ActionBar({
   onOpenInventory
 }) {
   const charClass = currentFighter?.class || 'Warrior';
-  const specialInfo = SPECIAL_MOVE_INFO[charClass] || { name: 'Special', cost: 0, desc: 'Special move' };
+  const specialCost = SPECIAL_MOVE_COSTS[charClass] || 0;
   const currentMana = currentFighter?.mana || 0;
-  const hasManaForSpecial = currentMana >= specialInfo.cost;
+  const hasManaForSpecial = currentMana >= specialCost;
   const itemCount = currentFighter?.inventory?.length || 0;
 
-  // Compute disabled reasons
-  let disabledReason = '';
-  if (isGameOver) {
-    disabledReason = 'Match concluded. Winner has been decided by Arena::checkWinner().';
-  } else if (!isMyTurn) {
-    disabledReason = "Opponent's Turn — Input locked by Arena turn order.";
-  }
+  const getDisabledReason = (actionType) => {
+    if (isGameOver) return 'Game over';
+    if (!isMyTurn) return "Opponent's turn";
+    if (actionType === 'special' && !hasManaForSpecial) return 'Not enough mana';
+    return null;
+  };
 
-  const handleActionClick = (actionName) => {
+  const handleAction = (actionName) => {
     if (!isMyTurn || isGameOver) return;
     onAction(actionName);
   };
 
+  const attackDisabled = !isMyTurn || isGameOver;
+  const specialDisabled = !isMyTurn || isGameOver || !hasManaForSpecial;
+  const itemDisabled = !isMyTurn || isGameOver;
+  const skipDisabled = !isMyTurn || isGameOver;
+
   return (
-    <div className="action-bar-container" aria-label="Combat Actions">
-      <div className="action-bar-header">
-        <div className="action-bar-title">
-          <span className="console-icon">🎮</span>
-          <span className="heading-font">Combat Command Console</span>
-        </div>
-
-        <div className="action-status-indicator">
-          {disabledReason ? (
-            <span className="status-locked">🔒 {disabledReason}</span>
-          ) : (
-            <span className="status-unlocked">🔥 YOUR TURN — Select a polymorphic method</span>
+    <div className="action-bar" aria-label="Combat actions">
+      <div className="action-grid">
+        {/* Attack */}
+        <button
+          type="button"
+          className="btn-action"
+          onClick={() => handleAction('attack')}
+          disabled={attackDisabled}
+          aria-label="Attack"
+        >
+          <div className="action-main">
+            <Sword size={18} strokeWidth={2} />
+            <span className="action-label">Attack</span>
+          </div>
+          {getDisabledReason('attack') && (
+            <span className="action-reason">{getDisabledReason('attack')}</span>
           )}
-        </div>
-      </div>
-
-      <div className="action-buttons-grid">
-        {/* NORMAL ATTACK */}
-        <button
-          className="btn-action action-attack"
-          onClick={() => handleActionClick('attack')}
-          disabled={!isMyTurn || isGameOver}
-          aria-label="Execute normal attack"
-        >
-          <div className="action-icon">⚔️</div>
-          <div className="action-meta">
-            <span className="action-main-title">Normal Attack</span>
-            <code className="action-cpp-method">Character::attack()</code>
-          </div>
-          <div className="action-tagline">Physical Strike</div>
         </button>
 
-        {/* SPECIAL MOVE */}
+        {/* Special move */}
         <button
-          className="btn-action action-special"
-          onClick={() => handleActionClick('special')}
-          disabled={!isMyTurn || isGameOver || !hasManaForSpecial}
-          title={!hasManaForSpecial ? `Requires ${specialInfo.cost} MP (Available: ${currentMana} MP)` : specialInfo.desc}
-          aria-label={`Execute special move: ${specialInfo.name}`}
+          type="button"
+          className="btn-action"
+          onClick={() => handleAction('special')}
+          disabled={specialDisabled}
+          aria-label="Special move"
         >
-          <div className="action-icon">💥</div>
-          <div className="action-meta">
-            <span className="action-main-title">{specialInfo.name}</span>
-            <code className="action-cpp-method">Character::specialMove()</code>
+          <div className="action-main">
+            <Zap size={18} strokeWidth={2} />
+            <span className="action-label">Special move</span>
           </div>
-          <div className="action-tagline">
-            {specialInfo.cost > 0 ? (
-              <span className={hasManaForSpecial ? 'mana-cost' : 'mana-cost-insufficient'}>
-                {specialInfo.cost} MP {!hasManaForSpecial && '(Low MP)'}
-              </span>
-            ) : (
-              <span className="mana-cost-free">0 MP (Recoil)</span>
-            )}
-          </div>
+          {getDisabledReason('special') ? (
+            <span className="action-reason">{getDisabledReason('special')}</span>
+          ) : specialCost > 0 ? (
+            <span className="action-cost">{specialCost} Mana</span>
+          ) : (
+            <span className="action-cost">0 Mana</span>
+          )}
         </button>
 
-        {/* USE ITEM */}
+        {/* Use item */}
         <button
-          className="btn-action action-item"
+          type="button"
+          className="btn-action"
           onClick={onOpenInventory}
-          disabled={!isMyTurn || isGameOver}
-          aria-label="Open Inventory to use or combine items"
+          disabled={itemDisabled}
+          aria-label="Use item"
         >
-          <div className="action-icon">🧪</div>
-          <div className="action-meta">
-            <span className="action-main-title">Use Item ({itemCount})</span>
-            <code className="action-cpp-method">Inventory&lt;T&gt;::getItem()</code>
+          <div className="action-main">
+            <FlaskConical size={18} strokeWidth={2} />
+            <span className="action-label">Use item</span>
           </div>
-          <div className="action-tagline">Potions & Gear</div>
+          {getDisabledReason('item') ? (
+            <span className="action-reason">{getDisabledReason('item')}</span>
+          ) : (
+            <span className="action-count">{itemCount} items</span>
+          )}
         </button>
 
-        {/* SKIP TURN */}
+        {/* Skip turn */}
         <button
-          className="btn-action action-skip"
-          onClick={() => handleActionClick('skip')}
-          disabled={!isMyTurn || isGameOver}
-          aria-label="Skip current turn"
+          type="button"
+          className="btn-action"
+          onClick={() => handleAction('skip')}
+          disabled={skipDisabled}
+          aria-label="Skip turn"
         >
-          <div className="action-icon">🛡️</div>
-          <div className="action-meta">
-            <span className="action-main-title">Skip Turn</span>
-            <code className="action-cpp-method">Arena::applyAction("skip")</code>
+          <div className="action-main">
+            <SkipForward size={18} strokeWidth={2} />
+            <span className="action-label">Skip turn</span>
           </div>
-          <div className="action-tagline">Bide Time</div>
+          {getDisabledReason('skip') && (
+            <span className="action-reason">{getDisabledReason('skip')}</span>
+          )}
         </button>
       </div>
     </div>

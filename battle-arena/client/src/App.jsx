@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import Header from './components/Header';
-import Footer from './components/Footer';
+import GameHeader from './components/GameHeader';
 import HomeScreen from './components/HomeScreen';
 import SelectScreen from './components/SelectScreen';
 import BattleScreen from './components/BattleScreen';
-import ConceptsDrawer from './components/ConceptsDrawer';
-import HowToPlayModal from './components/HowToPlayModal';
 import Toast from './components/Toast';
+import LandingPage from './landing/LandingPage';
 
 const getInitialServerUrl = () => {
   if (import.meta.env.VITE_SERVER_URL) {
@@ -18,7 +16,6 @@ const getInitialServerUrl = () => {
     if (saved) return saved;
 
     const hostname = window.location.hostname;
-    // Local development or local Wi-Fi IP
     if (hostname === 'localhost' || hostname === '127.0.0.1' || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
       return `http://${hostname}:3001`;
     }
@@ -26,7 +23,15 @@ const getInitialServerUrl = () => {
   return 'https://battle-arena-server-sutp.onrender.com';
 };
 
+const getInitialRoute = () => {
+  if (typeof window !== 'undefined') {
+    return window.location.hash === '#/play' ? '#/play' : '#/';
+  }
+  return '#/';
+};
+
 export default function App() {
+  const [route, setRoute] = useState(getInitialRoute);
   const [serverUrl, setServerUrl] = useState(getInitialServerUrl);
   const [isConnected, setIsConnected] = useState(false);
   const [screen, setScreen] = useState('home'); // 'home' | 'select' | 'battle'
@@ -37,28 +42,48 @@ export default function App() {
   const [error, setError] = useState('');
   const [gameError, setGameError] = useState('');
   const [savedFileNotice, setSavedFileNotice] = useState('');
-
-  // Presentation & Modal States
-  const [presentationMode, setPresentationMode] = useState(false);
-  const [isConceptsOpen, setIsConceptsOpen] = useState(false);
-  const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
 
   const socketRef = useRef(null);
+
+  // Simple hash routing listener
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      if (hash === '#/play') {
+        setRoute('#/play');
+      } else {
+        setRoute('#/');
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const navigateToPlay = () => {
+    window.location.hash = '#/play';
+    setRoute('#/play');
+  };
+
+  const navigateToLanding = () => {
+    window.location.hash = '#/';
+    setRoute('#/');
+  };
 
   const addToast = (type, message, title = '') => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, type, message, title }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 5000);
+    }, 4500);
   };
 
   const removeToast = (id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Initialize or re-initialize socket on serverUrl change
+  // Socket connection lifecycle
   useEffect(() => {
     const socket = io(serverUrl, {
       transports: ['websocket', 'polling'],
@@ -68,55 +93,48 @@ export default function App() {
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      console.log('Connected to relay server:', socket.id);
       setIsConnected(true);
       setError('');
-      addToast('success', 'Connected to C++ relay server on port 3001', 'Engine Online');
+      addToast('success', 'Connected to server.');
     });
 
     socket.on('disconnect', () => {
       setIsConnected(false);
-      addToast('warning', 'Relay server disconnected. Reconnecting...', 'Connection Dropped');
+      addToast('warning', 'Server disconnected. Reconnecting...');
     });
 
-    socket.on('connect_error', (err) => {
-      console.error('Socket connection error:', err);
+    socket.on('connect_error', () => {
       setIsConnected(false);
-      setError(`Cannot connect to relay server at ${serverUrl}. Ensure 'node server.js' is running.`);
+      setError(`Cannot connect to server at ${serverUrl}. Ensure the server is running.`);
     });
 
-    // 1. Room Created
     socket.on('room_created', (data) => {
       setRoomCode(data.roomCode);
       setPlayerIndex(data.playerIndex);
       setPlayers(data.players);
       setScreen('select');
       setError('');
-      addToast('info', `Room ${data.roomCode} created. Waiting for Player 2 to join.`, 'Room Created');
+      addToast('info', `Room ${data.roomCode} created. Waiting for opponent.`);
     });
 
-    // 2. Room Joined
     socket.on('room_joined', (data) => {
       setRoomCode(data.roomCode);
       setPlayerIndex(data.playerIndex);
       setPlayers(data.players);
       setScreen('select');
       setError('');
-      addToast('info', `Joined Room ${data.roomCode} as Player 2.`, 'Room Joined');
+      addToast('info', `Joined room ${data.roomCode}.`);
     });
 
-    // 3. Join Error
     socket.on('join_error', (data) => {
       setError(data.message);
-      addToast('error', data.message, 'Join Failed');
+      addToast('error', data.message);
     });
 
-    // 4. Players Updated
     socket.on('players_updated', (data) => {
       setPlayers(data.players);
     });
 
-    // 5. Game State Received from C++ Engine
     socket.on('state', (state) => {
       setGameState(state);
       setGameError('');
@@ -125,31 +143,27 @@ export default function App() {
       }
     });
 
-    // 6. Game Exception from C++ Engine
     socket.on('game_error', (data) => {
       setGameError(data.error);
-      addToast('error', data.error, 'C++ GameException');
+      addToast('error', data.error);
       setTimeout(() => setGameError(''), 5000);
     });
 
-    // 7. Match Saved via C++ File I/O
     socket.on('match_saved', (data) => {
       setSavedFileNotice(data.file);
-      addToast('success', `Match report archived to ${data.file} via std::ofstream`, 'Arena::saveMatch');
+      addToast('success', `Match report saved to ${data.file}`);
       setTimeout(() => setSavedFileNotice(''), 6000);
     });
 
-    // 8. Rematch / Reset to Character Select
     socket.on('reset_to_select', (data) => {
       setPlayers(data.players);
       setGameState(null);
       setScreen('select');
-      addToast('info', 'Resetting match. Choose your archetype for the rematch!', 'Rematch Ready');
+      addToast('info', 'Rematch started. Choose your character.');
     });
 
-    // 9. Opponent Left
     socket.on('opponent_left', (data) => {
-      addToast('warning', data.message || 'Opponent disconnected. Match closed.', 'Opponent Departed');
+      addToast('warning', data.message || 'Opponent disconnected. Match closed.');
       setScreen('home');
       setGameState(null);
       setRoomCode('');
@@ -161,7 +175,6 @@ export default function App() {
     };
   }, [serverUrl]);
 
-  // Actions emitted to relay server
   const handleCreateRoom = (playerName) => {
     socketRef.current?.emit('create_room', { playerName });
   };
@@ -193,23 +206,21 @@ export default function App() {
     }
   };
 
+  if (route === '#/') {
+    return <LandingPage onPlayNow={navigateToPlay} />;
+  }
+
   return (
-    <div className={`app-container ${presentationMode ? 'presentation-mode' : ''}`}>
-      {/* Toast Notification Container */}
+    <div className="game-app-container">
       <Toast toasts={toasts} onDismiss={removeToast} />
 
-      {/* Global Header */}
-      <Header
+      <GameHeader
         isConnected={isConnected}
         roomCode={roomCode}
-        presentationMode={presentationMode}
-        onTogglePresentationMode={() => setPresentationMode(!presentationMode)}
-        onOpenConcepts={() => setIsConceptsOpen(true)}
-        onOpenGuide={() => setIsGuideOpen(true)}
+        onBackToSite={navigateToLanding}
       />
 
-      {/* Main Screen Router */}
-      <main className="app-main-content">
+      <main className="game-main-content">
         {screen === 'home' && (
           <HomeScreen
             onCreateRoom={handleCreateRoom}
@@ -218,8 +229,6 @@ export default function App() {
             serverUrl={serverUrl}
             setServerUrl={handleServerUrlChange}
             isConnected={isConnected}
-            onOpenConcepts={() => setIsConceptsOpen(true)}
-            onOpenGuide={() => setIsGuideOpen(true)}
           />
         )}
 
@@ -241,36 +250,9 @@ export default function App() {
             onPlayAgain={handlePlayAgain}
             gameError={gameError}
             savedFileNotice={savedFileNotice}
-            presentationMode={presentationMode}
-            onOpenConcepts={() => setIsConceptsOpen(true)}
           />
         )}
       </main>
-
-      {/* Global Footer */}
-      <Footer onOpenConcepts={() => setIsConceptsOpen(true)} />
-
-      {/* OOP Concepts Interactive Drawer */}
-      <ConceptsDrawer
-        isOpen={isConceptsOpen}
-        onClose={() => setIsConceptsOpen(false)}
-        demonstratedConcepts={[
-          'inheritance',
-          'abstraction',
-          'static_members',
-          'polymorphism',
-          'encapsulation',
-          'templates',
-          ...(gameError ? ['exceptions'] : []),
-          ...(savedFileNotice ? ['file_io'] : [])
-        ]}
-      />
-
-      {/* How To Play & Guide Modal */}
-      <HowToPlayModal
-        isOpen={isGuideOpen}
-        onClose={() => setIsGuideOpen(false)}
-      />
     </div>
   );
 }
